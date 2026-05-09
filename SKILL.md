@@ -14,8 +14,10 @@ Bridge between sessions for the same project. Treats each session as a contribut
 | "save session" / "checkpoint" / "see you tomorrow" / "before I sleep" | **save** |
 | "where were we" / "continue from last session" / "resume" / "this is new session" | **resume** |
 | "what's on my plate" / "show active threads" / "give me a status" | **status** |
-| "set up session-connector" / "configure storage" / "where should sessions go" / first invocation with no `.claude/sessions/` directory | **setup** |
-| Truly ambiguous | Ask once: "Save current state, resume previous session, show active threads, or set up storage?" |
+| "set up session-connector" / "configure storage" / "where should sessions go" | **setup** |
+| Truly ambiguous | Ask once: "Save, resume, show status, or set up storage?" |
+
+**First-time bootstrap:** if no `.config.json` exists and `.claude/sessions/` is empty (or doesn't exist) on the first session-connector operation of any kind, run **setup** first — the user gets to choose between repo-local and external-drive storage before any data is written. Then proceed with the originally-requested operation. Once setup has completed (config exists), subsequent operations skip the bootstrap and read the config directly.
 
 If the user is mid-task and not signaling a session boundary, **don't invoke**. Just do the work.
 
@@ -125,14 +127,15 @@ Triggers: "set up session-connector" / "configure storage" / "where should sessi
 
 2. **Offer numbered choices:**
    - **(default)** Repo-local: `<repo-root>/.claude/sessions/`
-   - **(if external/USB drives detected)** Each one as: `<drive>/session-connector/<project-name>/` — derive `<project-name>` from the repo's basename.
-   - **(custom)** Let the user type any absolute path.
+   - **(if external / USB drives detected)** Each one as: `<drive>/session-connector/<project-name>/`. The top-level `session-connector/` folder on the drive is **mandatory** — it isolates all session-connector data from any other files on the drive, makes backup and cleanup predictable ("delete just that folder"), and gives the project-isolation safety rule a clear scope. Derive `<project-name>` from the repo's basename.
+   - **(custom)** Let the user type any absolute path. If the path lands on an external / removable drive but is not under `<drive>/session-connector/`, refuse — tell the user the drive must use the `session-connector/` top-level folder convention, and offer to auto-prepend it or have them re-pick. Custom paths on internal drives can use any structure the user prefers.
 
 3. **Wait for the user to choose.** Don't auto-pick.
 
 4. **Create the chosen location** if it doesn't exist, with empty `HEAD.md` and empty `threads/` directory.
+   - On external drives, **create the parent `<drive>/session-connector/` folder first** if it doesn't already exist, then the `<project-name>/` subfolder inside it. The top-level `session-connector/` folder is the scope-marker for the convention — its presence on a drive declares "session-connector data lives here, and only here."
    - **If the chosen path already contains files**, stop. Show the user what's there. Ask whether to (a) use the existing data as-is (e.g., they're re-installing on a new machine and pointing at an existing session archive), (b) pick a different path, or (c) abort. Never silently merge, never overwrite.
-   - If the path resolves to a USB drive's `session-connector/<project-name>/` and `<project-name>` collides with a different existing project on that drive, refuse to proceed and ask the user to pick a unique name. Don't risk cross-project contamination.
+   - If the path resolves to `<drive>/session-connector/<project-name>/` and `<project-name>` collides with a different existing project on that drive, refuse to proceed and ask the user to pick a unique name. Don't risk cross-project contamination.
 
 5. **Write the config** to `<repo-root>/.claude/sessions/.config.json`:
    ```json
@@ -226,6 +229,8 @@ These prevent catastrophic data loss. They override every other instruction in t
 - **Treat any "clean up" / "tidy" / "remove old" request as a surgical operation, not a sweep.** List what's there, show the user, delete one item at a time after confirmation. Never use `rm -rf`, `Remove-Item -Recurse`, glob deletions, or anything similar within session-connector storage. Default answer: "I'll list what's there and you tell me what to delete."
 
 - **Stay strictly within the configured project storage folder.** The `storage_path` from `.config.json` already namespaces by project (e.g., `D:/session-connector/<project-name>/`). Never read, write, list, or delete anything above that path. If two projects share the same USB drive, they must remain isolated by their subfolders.
+
+- **On external / removable drives, all session-connector data must live under `<drive>/session-connector/`.** This is non-negotiable: the top-level `session-connector/` folder on the drive is the scope-marker for everything this skill does. Setup enforces it at configuration time; never accept or auto-create a path on an external drive that bypasses it.
 
 - **Never overwrite existing data during setup.** If the chosen storage location already contains files, stop and ask the user whether to (a) use the existing data as-is, (b) pick a different path, or (c) abort. Never silently merge or overwrite.
 

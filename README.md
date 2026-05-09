@@ -59,6 +59,7 @@ By default, sessions live at `<repo-root>/.claude/sessions/` — same drive as t
 
 - **First invocation** with no `.claude/sessions/` directory triggers setup automatically. You can also invoke it explicitly: "configure storage" / "where should sessions go".
 - The skill detects USB / external / removable drives via the platform-appropriate command (`Get-Volume` on Windows, `diskutil list external` on macOS, `lsblk` on Linux) and offers each as a numbered option.
+- **All data on an external drive lives under `<drive>/session-connector/<project-name>/`.** The top-level `session-connector/` folder is mandatory — cleanup is always "delete that one folder" and there's zero risk of the skill ever touching unrelated files on the drive. Custom paths that try to bypass this convention on an external drive are refused.
 - Your choice is saved to `<repo-root>/.claude/sessions/.config.json` — a tiny pointer file that lives in the repo. Actual session data lives wherever you pointed it.
 - Before each save / resume, the skill verifies the configured drive is reachable. If your USB drive isn't plugged in, you get a clear warning instead of silently writing to the wrong place.
 
