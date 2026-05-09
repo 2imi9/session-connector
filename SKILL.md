@@ -14,16 +14,18 @@ Bridge between sessions for the same project. Treats each session as a contribut
 | "save session" / "checkpoint" / "see you tomorrow" / "before I sleep" | **save** |
 | "where were we" / "continue from last session" / "resume" / "this is new session" | **resume** |
 | "what's on my plate" / "show active threads" / "give me a status" | **status** |
-| Truly ambiguous | Ask once: "Save current state, resume previous session, or show active threads?" |
+| "set up session-connector" / "configure storage" / "where should sessions go" / first invocation with no `.claude/sessions/` directory | **setup** |
+| Truly ambiguous | Ask once: "Save current state, resume previous session, show active threads, or set up storage?" |
 
 If the user is mid-task and not signaling a session boundary, **don't invoke**. Just do the work.
 
 ## Where state lives
 
-`<repo-root>/.claude/sessions/`, found via `git rev-parse --show-toplevel`.
+By default: `<repo-root>/.claude/sessions/`, found via `git rev-parse --show-toplevel`.
 
 ```
 .claude/sessions/
+├── .config.json                   # optional — points to alternate storage
 ├── HEAD.md                        # last session + active thread list
 ├── threads/
 │   └── <thread-name>.md           # one file per investigation arc
@@ -36,6 +38,19 @@ If the user is mid-task and not signaling a session boundary, **don't invoke**. 
 ```
 
 Sessions are scoped to the worktree root if you're in one. Don't auto-edit `.gitignore` — mention it once and let the user decide.
+
+### Storage path resolution
+
+On every operation (save / resume / status), resolve the actual sessions root in this order:
+
+1. If `<repo-root>/.claude/sessions/.config.json` exists, use `config["storage_path"]`. The repo-side `.claude/sessions/` directory only holds the config; everything else lives at the configured path.
+2. Otherwise, use `<repo-root>/.claude/sessions/` directly.
+
+If the configured path is unreachable (e.g., USB drive not plugged in):
+- Tell the user clearly: "Configured storage at `{path}` isn't accessible. Drive `{drive_label}` may be unplugged."
+- Offer: plug in and retry, re-run setup, or fall back to repo-local for this session only.
+
+**Don't auto-create state in the wrong location** when storage is unreachable — losing track of where the canonical state lives is much worse than asking the user.
 
 ## File formats
 
@@ -97,7 +112,45 @@ Sort active threads by `last_touched` descending. Dormant/resolved sections are 
 
 ## Operations
 
+### setup (first-run / configuration)
+
+Triggers: "set up session-connector" / "configure storage" / "where should sessions go", or any first invocation where `.claude/sessions/` doesn't exist yet.
+
+1. **Detect available storage** using the platform-appropriate command:
+   - Windows: `Get-Volume | Select-Object DriveLetter, FileSystemLabel, DriveType, @{Name='FreeGB';Expression={[math]::Round($_.SizeRemaining/1GB,1)}} | Format-Table` (via PowerShell)
+   - macOS: `diskutil list external` and `df -h`
+   - Linux: `lsblk -d -o NAME,SIZE,TYPE,MOUNTPOINT,LABEL,RM` (RM=1 is removable / USB)
+
+   Show the user the result, distinguishing internal drives from USB/external/removable.
+
+2. **Offer numbered choices:**
+   - **(default)** Repo-local: `<repo-root>/.claude/sessions/`
+   - **(if external/USB drives detected)** Each one as: `<drive>/session-connector/<project-name>/` — derive `<project-name>` from the repo's basename.
+   - **(custom)** Let the user type any absolute path.
+
+3. **Wait for the user to choose.** Don't auto-pick.
+
+4. **Create the chosen location** if it doesn't exist, with empty `HEAD.md` and empty `threads/` directory.
+
+5. **Write the config** to `<repo-root>/.claude/sessions/.config.json`:
+   ```json
+   {
+     "storage_path": "<absolute path the user chose>",
+     "drive_label": "<volume label if external, else null>",
+     "configured_at": "YYYY-MM-DD"
+   }
+   ```
+   The repo-side `.claude/sessions/` always exists (just to hold this config); actual session data lives at `storage_path`.
+
+6. **Suggest gitignore once** if `.claude/` isn't already ignored. Don't edit it for them.
+
+7. **Confirm** in 1-2 lines: storage path + a note about what to do next ("ready to use; invoke 'save session' or 'resume' as normal").
+
+If a USB drive is selected, also note: "Sessions will live on `<drive_label>`. session-connector will check the drive is plugged in before save/resume operations."
+
 ### save (end-of-session)
+
+0. **Resolve the sessions root** per "Storage path resolution" above. If the configured path is unreachable, stop and warn the user — don't write to a fallback without explicit consent.
 
 1. **Identify which threads this session touched.** Read the conversation. Match to existing threads in `threads/`. If genuinely new investigation, create a new thread file (default status: active).
 
@@ -117,6 +170,8 @@ Sort active threads by `last_touched` descending. Dormant/resolved sections are 
 6. **Confirm** in 1-2 lines: path + threads advanced + top of next-action stack. Don't recap content the user just produced with you.
 
 ### resume (start-of-session)
+
+0. **Resolve the sessions root** per "Storage path resolution" above. If the configured path is unreachable, tell the user and offer to re-run setup or work from auto-memory alone.
 
 1. **Read `HEAD.md` only.** Don't read thread files yet.
 

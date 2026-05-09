@@ -53,6 +53,17 @@ Three layers, in order from most concrete to most durable:
 - **Thread state** (per investigation arc). Has a HEAD that's rewritten in full each session, plus a chronology of one-liners that grows.
 - **Project memory** (already handled by Claude Code's auto-memory). Threads *reference* memory entries; they don't duplicate them.
 
+## Storage (portable workflows)
+
+By default, sessions live at `<repo-root>/.claude/sessions/` — same drive as the code. For researchers with portable workflows (USB SSDs that follow you between home / lab / office machines), a `setup` mode detects external drives and lets you choose where state actually lives.
+
+- **First invocation** with no `.claude/sessions/` directory triggers setup automatically. You can also invoke it explicitly: "configure storage" / "where should sessions go".
+- The skill detects USB / external / removable drives via the platform-appropriate command (`Get-Volume` on Windows, `diskutil list external` on macOS, `lsblk` on Linux) and offers each as a numbered option.
+- Your choice is saved to `<repo-root>/.claude/sessions/.config.json` — a tiny pointer file that lives in the repo. Actual session data lives wherever you pointed it.
+- Before each save / resume, the skill verifies the configured drive is reachable. If your USB drive isn't plugged in, you get a clear warning instead of silently writing to the wrong place.
+
+This means you can keep your raw working state on a portable drive while the project repo on each machine just has a 60-byte pointer.
+
 ## Install
 
 ### Claude Code (user-level skill)
