@@ -86,6 +86,24 @@ Invoke by phrase, not by name. The skill listens for natural session-boundary si
 - **Start of session**: "where were we" / "continue from last session" / "resume"
 - **Anytime**: "what's on my plate" / "show active threads" / "what investigations are open"
 
+## Safety
+
+`session-connector` **never auto-deletes** anything. Old sessions, dormant threads, and resolved threads all stay on disk indefinitely — status changes are metadata only. If you ask the skill to clean up, it lists what's there and asks before removing each item; it never sweeps.
+
+When using portable USB / external drive storage, projects are strictly isolated by subfolder (`<drive>/session-connector/<project-name>/`). The skill never reads, writes, or lists anything above its configured project folder, so two projects sharing the same USB drive can't accidentally clobber each other.
+
+If setup detects existing files at the chosen storage location, it stops and asks rather than overwriting.
+
+### Recommended: a dedicated empty drive
+
+For maximum safety, **use a fresh / empty external drive for session-connector storage** (or a drive used only for research-session data). Reasons:
+
+- Zero risk of the skill ever touching unrelated files — the drive only holds session-connector data, so even a worst-case bug can't reach photos, documents, backups, or any other personal data.
+- One-shot backup: you can clone the whole drive periodically without sorting out which folders matter.
+- Simpler mental model: "this drive holds my research session state, nothing else."
+
+The skill works fine on a non-empty drive too — the safety rules above protect against overwriting — but a dedicated drive removes the entire class of "what if something goes wrong" worries.
+
 ## Why this beats simple snapshot/resume
 
 - **Resume is fast**: read 1 file (`HEAD.md`) instead of N (one per past session).

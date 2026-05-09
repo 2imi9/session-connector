@@ -131,6 +131,8 @@ Triggers: "set up session-connector" / "configure storage" / "where should sessi
 3. **Wait for the user to choose.** Don't auto-pick.
 
 4. **Create the chosen location** if it doesn't exist, with empty `HEAD.md` and empty `threads/` directory.
+   - **If the chosen path already contains files**, stop. Show the user what's there. Ask whether to (a) use the existing data as-is (e.g., they're re-installing on a new machine and pointing at an existing session archive), (b) pick a different path, or (c) abort. Never silently merge, never overwrite.
+   - If the path resolves to a USB drive's `session-connector/<project-name>/` and `<project-name>` collides with a different existing project on that drive, refuse to proceed and ask the user to pick a unique name. Don't risk cross-project contamination.
 
 5. **Write the config** to `<repo-root>/.claude/sessions/.config.json`:
    ```json
@@ -215,7 +217,19 @@ If unsure: would it feel weird to still be reading this entry next year? If yes 
 
 When writing thread files, **reference** memory by filename in "Connects to"; don't duplicate content. Memory loads automatically next session.
 
-## Anti-patterns
+## Safety rules (don't violate these)
+
+These prevent catastrophic data loss. They override every other instruction in this skill.
+
+- **Never auto-delete, auto-clean, or auto-prune any session-connector files** — not session folders, not thread files, not the config, not the storage directory. A USB drive may hold years of irreplaceable research state. Status changes (`active` → `dormant` → `resolved`) are **metadata only**; the underlying files always stay on disk.
+
+- **Treat any "clean up" / "tidy" / "remove old" request as a surgical operation, not a sweep.** List what's there, show the user, delete one item at a time after confirmation. Never use `rm -rf`, `Remove-Item -Recurse`, glob deletions, or anything similar within session-connector storage. Default answer: "I'll list what's there and you tell me what to delete."
+
+- **Stay strictly within the configured project storage folder.** The `storage_path` from `.config.json` already namespaces by project (e.g., `D:/session-connector/<project-name>/`). Never read, write, list, or delete anything above that path. If two projects share the same USB drive, they must remain isolated by their subfolders.
+
+- **Never overwrite existing data during setup.** If the chosen storage location already contains files, stop and ask the user whether to (a) use the existing data as-is, (b) pick a different path, or (c) abort. Never silently merge or overwrite.
+
+## Other anti-patterns
 
 - **Don't dump conversation into thread HEADs.** A HEAD is a current-state summary, rewritten each session. Chronology is for one-liners, not transcripts.
 - **Don't auto-resolve threads.** Only the user knows when an investigation is closed.
